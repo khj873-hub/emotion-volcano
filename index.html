@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emotion Volcano</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0704; --surface:#12100d; --border:rgba(255,255,255,0.07);
+  --text:#e8e0d0; --muted:rgba(232,224,208,0.45); --accent:#f97316;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-weight:300;min-height:100vh;overflow-x:hidden}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border)}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;background:linear-gradient(90deg,#f97316,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#status-badge{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:12px;color:var(--muted);transition:all .4s}
+#sdot{width:7px;height:7px;border-radius:50%;background:#374151;transition:background .4s}
+#sdot.on{background:#22c55e;box-shadow:0 0 8px #22c55e;animation:blink 1.4s infinite}
+#sdot.loading{background:#f59e0b;animation:blink .7s infinite}
+#sdot.err{background:#ef4444}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+main{display:grid;grid-template-columns:270px 1fr 270px;height:calc(100vh - 57px);min-height:580px}
+.panel-left{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.cam-wrap{position:relative;background:#000;flex-shrink:0;aspect-ratio:4/3;overflow:hidden}
+#video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+#ov-canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none}
+.cam-ui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(10,7,4,.88);transition:opacity .5s}
+.cam-ui.gone{opacity:0;pointer-events:none}
+.cam-ui p{font-size:11px;color:var(--muted);text-align:center;line-height:1.7;padding:0 16px}
+#cam-btn{padding:9px 22px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-family:inherit;cursor:pointer;transition:background .2s,transform .1s}
+#cam-btn:hover{background:#ea6d0e}
+#cam-btn:active{transform:scale(.97)}
+#cam-btn:disabled{background:#374151;cursor:not-allowed}
+.section-label{font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.emo-section{flex:1;padding:14px 16px;overflow-y:auto}
+.emo-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.emo-icon{font-size:14px;width:22px;flex-shrink:0}
+.emo-name{font-size:11px;color:var(--muted);width:42px;flex-shrink:0}
+.emo-track{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.emo-fill{height:100%;border-radius:2px;width:0%;transition:width .25s ease}
+.emo-pct{font-size:10px;color:var(--muted);width:28px;text-align:right;flex-shrink:0}
+.manual-sec{border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0}
+.m-row{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.m-row label{font-size:11px;color:var(--muted);width:38px;flex-shrink:0}
+.m-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;background:rgba(255,255,255,.12);cursor:pointer;outline:none}
+.m-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer}
+.m-clear{width:100%;padding:5px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;font-family:inherit;cursor:pointer;margin-top:6px;transition:all .2s}
+.m-clear:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.gauges{border-top:1px solid var(--border);padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px;flex-shrink:0}
+.gauge-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.gauge-label{font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:3px}
+.gauge-val{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;line-height:1}
+.gauge-unit{font-size:9px;color:var(--muted);margin-left:1px}
+.center{position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 110%,rgba(120,30,10,.25) 0%,transparent 65%),linear-gradient(180deg,#080508 0%,#0d0805 100%)}
+#volcano-canvas{width:100%;height:100%;display:block}
+#vstate{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:rgba(10,7,4,.82);border:1px solid var(--border);border-radius:24px;padding:6px 20px;font-size:13px;white-space:nowrap;backdrop-filter:blur(6px);transition:all .5s}
+#dbg{position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;font-size:10px;color:rgba(255,255,255,.5);line-height:1.8;font-family:monospace;min-width:170px}
+.panel-right{border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.science-card{padding:18px 18px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.dom-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+#dom-icon{font-size:30px;line-height:1}
+#dom-name{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;line-height:1;transition:color .5s}
+#science-text{font-size:11px;line-height:1.85;color:rgba(232,224,208,.6)}
+.vtype-card{padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+#vtype-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;margin-bottom:4px;transition:color .5s}
+#vtype-desc{font-size:11px;color:var(--muted);line-height:1.6}
+.tl-section{flex:1;padding:14px 18px;overflow-y:auto}
+#tl-list{display:flex;flex-direction:column;gap:5px}
+.tl-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.tl-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.tl-time{flex-shrink:0;width:44px;font-family:monospace}
+.ctrl-bar{border-top:1px solid var(--border);padding:10px 18px;display:flex;gap:7px;flex-shrink:0}
+.ctrl-btn{flex:1;padding:7px 0;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:10px;font-family:inherit;cursor:pointer;transition:all .2s}
+.ctrl-btn:hover{background:rgba(255,255,255,.09);color:var(--text)}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000;gap:18px}
+#loading.gone{display:none}
+.l-logo{font-family:'Bebas Neue',sans-serif;font-size:44px;letter-spacing:6px;background:linear-gradient(90deg,#f97316,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.l-bar-wrap{width:180px;height:2px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+.l-bar{height:100%;background:linear-gradient(90deg,#f97316,#ef4444);border-radius:2px;transition:width .3s}
+#l-msg{font-size:11px;color:rgba(232,224,208,.4)}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="l-logo">EMOTION VOLCANO</div>
+  <div style="font-size:12px;color:var(--muted);letter-spacing:2px">감정이 지구가 된다</div>
+  <div class="l-bar-wrap"><div class="l-bar" id="l-bar" style="width:0%"></div></div>
+  <div id="l-msg">초기화 중...</div>
+</div>
+
+<header>
+  <div class="logo">EMOTION × VOLCANO</div>
+  <div id="status-badge"><div id="sdot"></div><span id="stxt">대기 중</span></div>
+  <div style="font-size:11px;color:var(--muted);letter-spacing:1px">감정 → 지구 내부 에너지</div>
+</header>
+
+<main>
+  <div class="panel-left">
+    <div class="cam-wrap">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="ov-canvas"></canvas>
+      <div class="cam-ui" id="cam-ui">
+        <p>얼굴 감정으로<br>화산을 깨워보세요</p>
+        <button id="cam-btn" onclick="startCamera()">카메라 켜기</button>
+        <p style="font-size:10px;margin-top:2px">또는 아래 슬라이더로 체험</p>
+      </div>
+    </div>
+
+    <div class="emo-section">
+      <div class="section-label">감정 강도 실시간</div>
+      <div id="emo-bars"></div>
+    </div>
+
+    <div class="manual-sec">
+      <div class="section-label">수동 감정 조절</div>
+      <div class="m-row"><label>😠 분노</label><input type="range" min="0" max="100" value="0" id="sl-angry"     oninput="onSlider('angry',+this.value)"></div>
+      <div class="m-row"><label>😨 두려움</label><input type="range" min="0" max="100" value="0" id="sl-fearful"  oninput="onSlider('fearful',+this.value)"></div>
+      <div class="m-row"><label>😮 놀람</label><input type="range" min="0" max="100" value="0" id="sl-surprised" oninput="onSlider('surprised',+this.value)"></div>
+      <div class="m-row"><label>😊 기쁨</label><input type="range" min="0" max="100" value="0" id="sl-happy"     oninput="onSlider('happy',+this.value)"></div>
+      <div class="m-row"><label>😢 슬픔</label><input type="range" min="0" max="100" value="0" id="sl-sad"       oninput="onSlider('sad',+this.value)"></div>
+      <button class="m-clear" onclick="clearSliders()">슬라이더 초기화 (카메라 모드 복귀)</button>
+    </div>
+
+    <div class="gauges">
+      <div class="gauge-card"><div class="gauge-label">마그마 온도</div><div class="gauge-val" id="g-temp" style="color:#f97316">750<span class="gauge-unit">°C</span></div></div>
+      <div class="gauge-card"><div class="gauge-label">챔버 압력</div><div class="gauge-val" id="g-press" style="color:#ef4444">20<span class="gauge-unit">MPa</span></div></div>
+      <div class="gauge-card"><div class="gauge-label">마그마 점성</div><div class="gauge-val" id="g-visc" style="color:#f59e0b">HIGH</div></div>
+      <div class="gauge-card"><div class="gauge-label">분화 위험도</div><div class="gauge-val" id="g-risk" style="color:#22c55e">LOW</div></div>
+    </div>
+  </div>
+
+  <div class="center">
+    <canvas id="volcano-canvas"></canvas>
+    <div id="vstate">😐 &nbsp;휴화산 — 안정 상태</div>
+    <div id="dbg">
+      <div>모드: <span id="dbg-mode">대기</span></div>
+      <div>지배 감정: <span id="dbg-dom">neutral</span></div>
+      <div>강도: <span id="dbg-int">0%</span></div>
+      <div>감지: <span id="dbg-fps">-</span></div>
+    </div>
+  </div>
+
+  <div class="panel-right">
+    <div class="science-card">
+      <div class="section-label">현재 감정 상태</div>
+      <div class="dom-row">
+        <div id="dom-icon">😐</div>
+        <div><div id="dom-name" style="color:var(--muted)">중립</div><div style="font-size:10px;color:var(--muted)">Neutral</div></div>
+      </div>
+      <div id="science-text">얼굴 감정을 인식하면 지구 내부 에너지와 연결됩니다. 카메라를 켜거나 슬라이더를 조절해보세요.</div>
+    </div>
+
+    <div class="vtype-card">
+      <div class="section-label">화산 유형</div>
+      <div id="vtype-name" style="color:var(--muted)">휴화산 (Dormant)</div>
+      <div id="vtype-desc">마그마 챔버의 압력이 낮고 용암 활동이 없는 안정 상태</div>
+    </div>
+
+    <div class="tl-section">
+      <div class="section-label">감정 변화 기록</div>
+      <div id="tl-list"><div class="tl-item" style="color:rgba(232,224,208,.25)">감정 인식 시 자동 기록됩니다</div></div>
+    </div>
+
+    <div class="ctrl-bar">
+      <button class="ctrl-btn" onclick="saveImg()">📸 저장</button>
+      <button class="ctrl-btn" onclick="clearTL()">🗑 초기화</button>
+      <button class="ctrl-btn" onclick="doShare()">↗ 공유</button>
+    </div>
+  </div>
+</main>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────
+const CFG = {
+  angry:    {icon:'😠',name:'분노',  en:'Anger',   col:'#dc2626',temp:1350,press:95, visc:'LOW', risk:'CRITICAL',
+    science:'분노 감지: 맨틀 온도 급상승으로 마그마 점성이 크게 낮아집니다. 저점성 마그마는 화도를 빠르게 상승하며 챔버 압력이 지각 강도를 초과하면 폭발적 플리니식 분화가 발생합니다.',
+    vtype:'초화산 (Supervolcano)',vdesc:'극도로 높은 에너지 상태. 기록적 규모의 분화가 임박한 위험 단계.',
+    state:'😠 분노 — 플리니식 폭발 임박!',erupt:true,flow:true},
+  fearful:  {icon:'😨',name:'두려움',en:'Fear',    col:'#7c3aed',temp:1100,press:78, visc:'MED', risk:'HIGH',
+    science:'두려움 감지: 지각에 급격한 압력이 가해집니다. 취약한 단층면에 균열이 형성되고 화산성 지진이 발생합니다. 분화 직전의 전조 현상과 동일한 물리적 패턴입니다.',
+    vtype:'스트롬볼리식 (Strombolian)',vdesc:'주기적 소규모 폭발. 화도 내 가스 거품이 터지며 분출물을 방사합니다.',
+    state:'😨 두려움 — 지각 균열 압력 상승!',erupt:true,flow:false},
+  surprised:{icon:'😮',name:'놀람',  en:'Surprise',col:'#f59e0b',temp:1450,press:100,visc:'LOW', risk:'CRITICAL',
+    science:'놀람(최대 강도) 감지: 챔버 압력이 순간 최대치에 도달합니다. 수증기·CO₂가 마그마에서 폭발적으로 방출되어 VEI 최고 단계에 해당하는 분화를 일으킵니다.',
+    vtype:'폭발적 분화 (Explosive)',vdesc:'VEI 최고 단계. 화산재와 화쇄류가 수십 km까지 퍼지는 초대형 분화.',
+    state:'😮 놀람 — 폭발적 대분화 발생!',erupt:true,flow:true},
+  happy:    {icon:'😊',name:'기쁨',  en:'Joy',     col:'#22c55e',temp:950, press:42, visc:'MED', risk:'LOW',
+    science:'기쁨 감지: 유동성 높은 현무암질 마그마가 완만하게 분출됩니다. 하와이 킬라우에아 화산처럼 폭발 없이 용암이 흘러내리는 평화로운 분출 형태입니다.',
+    vtype:'하와이식 (Hawaiian)',vdesc:'저점성 현무암질 용암이 넓게 펼쳐지며 흐릅니다. 아름답고 평화로운 분출.',
+    state:'😊 기쁨 — 하와이식 평화 분출',erupt:true,flow:true},
+  sad:      {icon:'😢',name:'슬픔',  en:'Sadness', col:'#3b82f6',temp:680, press:15, visc:'HIGH',risk:'NONE',
+    science:'슬픔 감지: 마그마 챔버 온도가 하강합니다. 냉각된 마그마는 점성이 높아지고 결정이 성장합니다. 수천 년 침묵에 들어가는 죽어가는 화산의 상태입니다.',
+    vtype:'사화산 (Extinct)',vdesc:'마그마가 냉각·결정화되며 화산 활동이 완전히 소멸해가는 단계.',
+    state:'😢 슬픔 — 마그마 냉각, 화산 소멸',erupt:false,flow:false},
+  disgusted:{icon:'🤢',name:'혐오',  en:'Disgust', col:'#84cc16',temp:820, press:35, visc:'HIGH',risk:'LOW',
+    science:'혐오 감지: 마그마 챔버 내 가스 함유량이 높아집니다. 황화수소(H₂S)·이산화황(SO₂) 방출이 증가하며 화산가스 분출이 시작되는 전조 단계입니다.',
+    vtype:'가스 분출형 (Fumarolic)',vdesc:'용암 분출 없이 화산가스와 수증기만 방출하는 상태.',
+    state:'🤢 혐오 — 화산 가스 방출 증가',erupt:false,flow:false},
+  neutral:  {icon:'😐',name:'중립',  en:'Neutral', col:'#94a3b8',temp:750, press:20, visc:'HIGH',risk:'LOW',
+    science:'화산이 평온할 때, 지구 내부의 맨틀 대류는 천천히 순환합니다. 마그마 챔버 내 압력은 낮고 온도는 700~800°C 수준으로 유지됩니다.',
+    vtype:'휴화산 (Dormant)',vdesc:'마그마 챔버의 압력이 낮고 용암 활동이 없는 안정 상태.',
+    state:'😐 휴화산 — 안정 상태',erupt:false,flow:false},
+};
+const KEYS = ['angry','fearful','surprised','happy','sad','disgusted','neutral'];
+const RISKC = {NONE:'#22c55e',LOW:'#22c55e',MED:'#f59e0b',HIGH:'#f97316',CRITICAL:'#ef4444'};
+
+// ─── STATE ────────────────────────────────────────────────
+// raw: updated by camera OR sliders (0-1 each, sum~1)
+let raw     = {angry:0,fearful:0,surprised:0,happy:0,sad:0,disgusted:0,neutral:1};
+// smooth: exponential moving average of raw for display
+let smooth  = {angry:0,fearful:0,surprised:0,happy:0,sad:0,disgusted:0,neutral:1};
+const ALPHA = 0.22;          // smoothing factor (lower = smoother)
+
+// Slider values (0-100 integers) — separate from raw
+let sliderVals = {angry:0,fearful:0,surprised:0,happy:0,sad:0};
+let sliderActive = false;    // true when ANY slider > 0
+
+let domKey = 'neutral';
+let timeline = [], lastTLKey = '';
+let camRunning = false;
+let fpsCount = 0, fpsTimer = Date.now();
+
+// ─── EMOTION BARS ─────────────────────────────────────────
+(function buildBars(){
+  const c = document.getElementById('emo-bars');
+  KEYS.forEach(k => {
+    const cfg = CFG[k];
+    const d = document.createElement('div');
+    d.className = 'emo-row';
+    d.innerHTML = `<span class="emo-icon">${cfg.icon}</span>`
+      + `<span class="emo-name">${cfg.name}</span>`
+      + `<div class="emo-track"><div class="emo-fill" id="ef-${k}" style="background:${cfg.col}"></div></div>`
+      + `<span class="emo-pct" id="ep-${k}">0%</span>`;
+    c.appendChild(d);
+  });
+})();
+
+// ─── SLIDER LOGIC ─────────────────────────────────────────
+function onSlider(key, val){
+  sliderVals[key] = val;
+  sliderActive = Object.values(sliderVals).some(v => v > 0);
+  if (sliderActive) {
+    // Build raw from sliders: normalize so max=1, rest proportional
+    const total = Object.values(sliderVals).reduce((a,b) => a+b, 0);
+    KEYS.forEach(k => raw[k] = 0);
+    Object.entries(sliderVals).forEach(([k,v]) => { raw[k] = total > 0 ? v/100 : 0; });
+    // neutral fills the gap
+    raw.neutral = Math.max(0, 1 - Object.values(sliderVals).reduce((a,b)=>a+b,0)/100);
+  }
+}
+
+function clearSliders(){
+  sliderActive = false;
+  Object.keys(sliderVals).forEach(k => sliderVals[k] = 0);
+  KEYS.forEach(k => { const el = document.getElementById('sl-'+k); if(el) el.value=0; });
+  raw = {angry:0,fearful:0,surprised:0,happy:0,sad:0,disgusted:0,neutral:1};
+  document.getElementById('dbg-mode').textContent = camRunning ? '카메라' : '대기';
+}
+
+// ─── SMOOTH + DOMINANT ────────────────────────────────────
+function tick(){
+  // Smooth raw → smooth
+  KEYS.forEach(k => { smooth[k] = smooth[k]*(1-ALPHA) + (raw[k]||0)*ALPHA; });
+  // Find dominant
+  let mx=0, mk='neutral';
+  KEYS.forEach(k => { if(smooth[k]>mx){mx=smooth[k];mk=k;} });
+  domKey = mk;
+}
+
+// ─── UI UPDATE ────────────────────────────────────────────
+function updateUI(){
+  tick();
+  const cfg = CFG[domKey];
+  const iv  = smooth[domKey] || 0;
+
+  // Bars
+  KEYS.forEach(k => {
+    const v = smooth[k]||0;
+    const ef = document.getElementById('ef-'+k);
+    const ep = document.getElementById('ep-'+k);
+    if(ef) ef.style.width = Math.round(v*100)+'%';
+    if(ep) ep.textContent = Math.round(v*100)+'%';
+  });
+
+  // Gauges
+  document.getElementById('g-temp').innerHTML  = cfg.temp+'<span class="gauge-unit">°C</span>';
+  document.getElementById('g-press').innerHTML = cfg.press+'<span class="gauge-unit">MPa</span>';
+  document.getElementById('g-visc').textContent = cfg.visc;
+  const rEl = document.getElementById('g-risk');
+  rEl.textContent = cfg.risk;
+  rEl.style.color = RISKC[cfg.risk]||'#94a3b8';
+  document.getElementById('g-temp').style.color = iv>.6 ? '#ef4444':'#f97316';
+
+  // Right panel
+  document.getElementById('dom-icon').textContent   = cfg.icon;
+  document.getElementById('dom-name').textContent   = cfg.name;
+  document.getElementById('dom-name').style.color   = cfg.col;
+  document.getElementById('science-text').textContent = cfg.science;
+  document.getElementById('vtype-name').textContent   = cfg.vtype;
+  document.getElementById('vtype-name').style.color   = cfg.col;
+  document.getElementById('vtype-desc').textContent   = cfg.vdesc;
+
+  // Volcano state badge
+  const vs = document.getElementById('vstate');
+  vs.textContent = cfg.state;
+  vs.style.borderColor = cfg.col+'55';
+  vs.style.color = cfg.col;
+
+  // Debug
+  document.getElementById('dbg-dom').textContent = domKey;
+  document.getElementById('dbg-int').textContent = Math.round(iv*100)+'%';
+  document.getElementById('dbg-mode').textContent = sliderActive ? '슬라이더' : (camRunning ? '카메라' : '대기');
+
+  // Timeline: log when dominant changes and is strong enough
+  if(domKey!=='neutral' && domKey!==lastTLKey && iv>0.3){
+    lastTLKey = domKey;
+    const t = new Date();
+    const ts = [t.getHours(),t.getMinutes(),t.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+    timeline.unshift({icon:cfg.icon,name:cfg.name,col:cfg.col,ts});
+    if(timeline.length>20) timeline.pop();
+    const el=document.getElementById('tl-list');
+    el.innerHTML = timeline.map(i=>`<div class="tl-item"><div class="tl-dot" style="background:${i.col}"></div><span class="tl-time">${i.ts}</span><span>${i.icon} ${i.name}</span></div>`).join('');
+  }
+}
+
+// ─── VOLCANO CANVAS ───────────────────────────────────────
+const vc = document.getElementById('volcano-canvas');
+const vx = vc.getContext('2d');
+let VW, VH, t=0, particles=[];
+
+function resizeVC(){ VW=vc.offsetWidth; VH=vc.offsetHeight; vc.width=VW; vc.height=VH; }
+resizeVC(); window.addEventListener('resize',resizeVC);
+
+const lerp = (a,b,t) => a+(b-a)*t;
+
+function renderVolcano(){
+  const cfg=CFG[domKey], iv=smooth[domKey]||0;
+  t+=0.016;
+  const cx=VW/2, bY=VH*.67, pY=VH*.14, bW=VW*.45;
+
+  // Sky
+  const sk=vx.createLinearGradient(0,0,0,bY);
+  if(cfg.erupt&&iv>.4){sk.addColorStop(0,'#0a0305');sk.addColorStop(1,'#2a0d06');}
+  else if(domKey==='sad'){sk.addColorStop(0,'#060a10');sk.addColorStop(1,'#0d1520');}
+  else{sk.addColorStop(0,'#080508');sk.addColorStop(1,'#0d0805');}
+  vx.fillStyle=sk; vx.fillRect(0,0,VW,bY);
+
+  // Ground
+  const gr=vx.createLinearGradient(0,bY,0,VH);
+  gr.addColorStop(0,'#1c0d05');gr.addColorStop(1,'#0a0502');
+  vx.fillStyle=gr; vx.fillRect(0,bY,VW,VH-bY);
+
+  drawMantle(cx,bY,cfg,iv);
+  drawChamber(cx,bY,cfg,iv);
+  drawConduit(cx,pY,bY,cfg,iv);
+  drawBody(cx,bY,pY,bW);
+  if(cfg.flow&&iv>.2) drawLava(cx,pY,bY,bW,cfg,iv);
+  drawCrater(cx,pY,cfg,iv);
+  cfg.erupt ? spawnParticles(cx,pY,cfg,iv) : void 0;
+  drawParticles();
+  drawSmoke(cx,pY,cfg,iv);
+  drawLabels(cx,bY,pY);
+
+  // Shockwave for max-intensity emotions
+  if((domKey==='surprised'||domKey==='angry')&&iv>.6){
+    const sw=(t*65)%240;
+    vx.beginPath(); vx.arc(cx,pY+10,sw,0,Math.PI*2);
+    vx.strokeStyle=cfg.col; vx.globalAlpha=Math.max(0,.22-sw/1100);
+    vx.lineWidth=2; vx.stroke(); vx.globalAlpha=1;
+  }
+
+  requestAnimationFrame(renderVolcano);
+}
+
+function drawMantle(cx,bY,cfg,iv){
+  const hot=Math.min(1,iv*1.3), r=Math.round(lerp(50,165,hot)), g=Math.round(lerp(15,32,hot));
+  const mg=vx.createLinearGradient(0,bY,0,VH);
+  if(domKey==='sad'){mg.addColorStop(0,'rgba(20,40,80,.55)');mg.addColorStop(1,'rgba(10,20,50,.75)');}
+  else{mg.addColorStop(0,`rgba(${r},${g},5,.58)`);mg.addColorStop(1,`rgba(${Math.round(r*.55)},${Math.round(g*.55)},5,.72)`);}
+  vx.fillStyle=mg; vx.fillRect(0,bY,VW,VH-bY);
+
+  // Convection lines
+  const sp=.38+iv*1.4, al=.1+iv*.25;
+  vx.strokeStyle=domKey==='sad'?'rgba(80,120,200,.4)':'rgba(249,115,22,.48)';
+  vx.lineWidth=1.5; vx.setLineDash([8,6]); vx.lineDashOffset=-t*sp*30;
+  [[VW*.12,VW*.08,VW*.18,VW*.15],[VW*.88,VW*.92,VW*.82,VW*.85]].forEach(([x1,x2,x3,x4])=>{
+    vx.beginPath(); vx.moveTo(x1,VH);
+    vx.bezierCurveTo(x2,VH*.85,x3,VH*.78,x4,VH*.72);
+    vx.globalAlpha=al; vx.stroke();
+  });
+  vx.globalAlpha=1; vx.setLineDash([]);
+
+  // Core glow
+  const cg=vx.createRadialGradient(VW/2,VH,0,VW/2,VH,VW*.33);
+  cg.addColorStop(0,'rgba(253,230,138,.2)');cg.addColorStop(1,'rgba(180,83,9,0)');
+  vx.fillStyle=cg; vx.fillRect(0,bY,VW,VH-bY);
+}
+
+function drawChamber(cx,bY,cfg,iv){
+  const cW=VW*.25+iv*VW*.06, cH=VH*.085+iv*VH*.04, cY=bY+VH*.19;
+  const pulse=1+Math.sin(t*3)*.05*iv;
+
+  const gl=vx.createRadialGradient(cx,cY,0,cx,cY,cW*1.3);
+  gl.addColorStop(0,cfg.col+'40');gl.addColorStop(1,'transparent');
+  vx.fillStyle=gl; vx.beginPath(); vx.ellipse(cx,cY,cW*1.3*pulse,cH*1.75*pulse,0,0,Math.PI*2); vx.fill();
+
+  const ch=vx.createRadialGradient(cx,cY-cH*.2,cH*.1,cx,cY,cW);
+  if(domKey==='sad'){ch.addColorStop(0,'#60a5fa');ch.addColorStop(.6,'#1d4ed8');ch.addColorStop(1,'#1e3a8a');}
+  else{ch.addColorStop(0,'#fde68a');ch.addColorStop(.3,'#f97316');ch.addColorStop(.7,cfg.col);ch.addColorStop(1,'#7c1d0a');}
+  vx.beginPath(); vx.ellipse(cx,cY,cW*pulse,cH*pulse,0,0,Math.PI*2);
+  vx.fillStyle=ch; vx.globalAlpha=.88; vx.fill(); vx.globalAlpha=1;
+
+  if(iv>.12&&domKey!=='sad'){
+    for(let i=0;i<Math.floor(iv*7);i++){
+      const bx=cx+Math.sin(t*.7+i*1.3)*cW*.48, by=cY+Math.cos(t*.9+i*.8)*cH*.38;
+      const br=1.8+Math.sin(t*2+i)*1.4;
+      vx.beginPath(); vx.arc(bx,by,br,0,Math.PI*2);
+      vx.fillStyle='#fde68a'; vx.globalAlpha=.45; vx.fill();
+    }
+    vx.globalAlpha=1;
+  }
+}
+
+function drawConduit(cx,pY,bY,cfg,iv){
+  const cW=20+iv*18;
+  const gd=vx.createLinearGradient(cx-cW,0,cx+cW,0);
+  gd.addColorStop(0,'rgba(100,20,5,.22)');gd.addColorStop(.35,cfg.col+'aa');
+  gd.addColorStop(.65,'#f97316aa');gd.addColorStop(1,'rgba(100,20,5,.22)');
+  vx.beginPath();
+  vx.moveTo(cx-cW/2,bY+8); vx.lineTo(cx-cW*.33,pY+26);
+  vx.lineTo(cx+cW*.33,pY+26); vx.lineTo(cx+cW/2,bY+8);
+  vx.closePath(); vx.fillStyle=gd; vx.fill();
+
+  if(iv>.06){
+    const off=-(t*(40+iv*120))%(bY-pY);
+    vx.save();
+    vx.beginPath();
+    vx.moveTo(cx-cW*.33+2,bY+8); vx.lineTo(cx-cW*.26+2,pY+26);
+    vx.lineTo(cx+cW*.26-2,pY+26); vx.lineTo(cx+cW*.33-2,bY+8);
+    vx.closePath(); vx.clip();
+    vx.setLineDash([11,8]); vx.lineDashOffset=off;
+    vx.beginPath(); vx.moveTo(cx,bY+8); vx.lineTo(cx,pY+26);
+    vx.strokeStyle='#fbbf24'; vx.lineWidth=cW*.5; vx.globalAlpha=.28; vx.stroke();
+    vx.setLineDash([]); vx.globalAlpha=1; vx.restore();
+  }
+}
+
+function drawBody(cx,bY,pY,bW){
+  const lB=cx-bW, rB=cx+bW, cW=37;
+  vx.beginPath();
+  vx.moveTo(lB,bY);
+  vx.quadraticCurveTo(cx-bW*.58,bY-(bY-pY)*.28,cx-cW,pY+17);
+  vx.lineTo(cx-cW*.5,pY); vx.lineTo(cx+cW*.5,pY); vx.lineTo(cx+cW,pY+17);
+  vx.quadraticCurveTo(cx+bW*.58,bY-(bY-pY)*.28,rB,bY);
+  vx.closePath();
+  const bg=vx.createLinearGradient(cx,pY,cx,bY);
+  bg.addColorStop(0,'#0f0b09');bg.addColorStop(.5,'#1c1713');bg.addColorStop(1,'#2a211a');
+  vx.fillStyle=bg; vx.fill();
+}
+
+function drawLava(cx,pY,bY,bW,cfg,iv){
+  // drawBody와 동일한 제어점 사용: quadraticCurveTo(cx±bW*.58, bY-(bY-pY)*.28, base)
+  const cW=37;
+  const sides=[-1,1];
+  sides.forEach(side=>{
+    // 화산 경사면 시작점: 화구 림
+    const sX = cx + side*cW;
+    const sY = pY + 17;
+    // drawBody와 동일한 제어점
+    const cpX = cx + side*bW*.58;
+    const cpY = bY - (bY-pY)*.28;
+    // 끝점: 화산 밑단
+    const eX = cx + side*bW;
+    const eY = bY;
+
+    // 흐름 진행도: 0(화구) → 1(밑단), 시간에 따라 애니메이션
+    const progress = Math.min(1, (t*0.4*iv) % 1.4);  // 0~1 순환
+    // quadratic bezier 위에서 t=progress 지점 계산
+    const qx = (1-progress)*(1-progress)*sX + 2*(1-progress)*progress*cpX + progress*progress*eX;
+    const qy = (1-progress)*(1-progress)*sY + 2*(1-progress)*progress*cpY + progress*progress*eY;
+
+    // 경사면을 따라 내려오는 용암 선
+    const lg=vx.createLinearGradient(sX,sY,qx,qy);
+    lg.addColorStop(0,'#fde68a');
+    lg.addColorStop(0.25,'#f97316');
+    lg.addColorStop(0.65,cfg.col);
+    lg.addColorStop(1,cfg.col+'44');
+
+    vx.beginPath();
+    // 베지어 곡선을 steps로 잘라서 progress까지만 그림
+    vx.moveTo(sX,sY);
+    const steps=40;
+    for(let k=1;k<=steps;k++){
+      const tt=(k/steps)*progress;
+      const px=(1-tt)*(1-tt)*sX+2*(1-tt)*tt*cpX+tt*tt*eX;
+      const py=(1-tt)*(1-tt)*sY+2*(1-tt)*tt*cpY+tt*tt*eY;
+      vx.lineTo(px,py);
+    }
+    vx.strokeStyle=lg;
+    vx.lineWidth=5+iv*3;
+    vx.lineCap='round';
+    vx.lineJoin='round';
+    vx.globalAlpha=0.88;
+    vx.stroke();
+
+    // 글로우
+    vx.lineWidth=10+iv*6;
+    vx.strokeStyle=cfg.col;
+    vx.globalAlpha=0.12;
+    vx.stroke();
+    vx.globalAlpha=1;
+  });
+}
+
+function drawCrater(cx,pY,cfg,iv){
+  const cW=35+iv*10, cH=12+iv*5;
+  vx.beginPath(); vx.ellipse(cx,pY+7,cW,cH,0,0,Math.PI*2);
+  vx.fillStyle='#0a0704'; vx.fill();
+  vx.strokeStyle='#2a1a0d'; vx.lineWidth=2; vx.stroke();
+  const p=Math.sin(t*(3+iv*4))*.3+.7;
+  const ig=vx.createRadialGradient(cx,pY+7,0,cx,pY+7,cW);
+  ig.addColorStop(0,cfg.col+Math.round(p*215).toString(16).padStart(2,'0'));
+  ig.addColorStop(.5,cfg.col+'66'); ig.addColorStop(1,'transparent');
+  vx.beginPath(); vx.ellipse(cx,pY+7,cW*.8,cH*.8,0,0,Math.PI*2);
+  vx.fillStyle=ig; vx.fill();
+}
+
+function spawnParticles(cx,pY,cfg,iv){
+  const n=Math.floor(iv*10);
+  for(let i=0;i<n;i++){
+    const angle=-Math.PI/2+(Math.random()-.5)*(Math.PI*.55*iv);
+    const sp=3+Math.random()*iv*9;
+    particles.push({x:cx+(Math.random()-.5)*16,y:pY,
+      vx:Math.cos(angle)*sp*.6,vy:Math.sin(angle)*sp,
+      r:2+Math.random()*iv*4, life:1,
+      col:Math.random()>.5?cfg.col:(Math.random()>.5?'#f97316':'#fbbf24')});
+  }
+  if(particles.length>500) particles.splice(0,60);
+}
+
+function drawParticles(){
+  const alive=[];
+  particles.forEach(p=>{
+    p.life-=.013+Math.random()*.007;
+    p.x+=p.vx; p.y+=p.vy; p.vy+=.13; p.vx*=.99;
+    if(p.life>0){
+      vx.beginPath(); vx.arc(p.x,p.y,p.r*Math.max(0,p.life),0,Math.PI*2);
+      vx.fillStyle=p.col; vx.globalAlpha=p.life*.88; vx.fill(); vx.globalAlpha=1;
+      alive.push(p);
+    }
+  });
+  particles=alive;
+}
+
+function drawSmoke(cx,pY,cfg,iv){
+  const n=Math.ceil(iv*4)+1;
+  for(let i=0;i<n;i++){
+    const tt=(t*.3+i*.4)%1;
+    const y=pY-tt*(65+iv*85), r=9+tt*(16+iv*30);
+    const xo=Math.sin(tt*Math.PI+i)*(10+iv*16);
+    const al=(1-tt)*.28*(0.35+iv*.55);
+    vx.beginPath(); vx.arc(cx+xo,y,r,0,Math.PI*2);
+    vx.fillStyle=domKey==='sad'?`rgba(100,150,220,${al})`:(iv>.5?`rgba(38,22,12,${al})`:`rgba(120,90,60,${al})`);
+    vx.fill();
+  }
+}
+
+function drawLabels(cx,bY,pY){
+  vx.font='10px "Noto Sans KR",sans-serif';
+  vx.textAlign='left'; vx.fillStyle='rgba(232,224,208,.35)';
+  vx.fillText('▸ 마그마 챔버',14,bY+(VH-bY)*.22);
+  vx.fillStyle='rgba(232,224,208,.2)';
+  vx.fillText(`  ${Math.round((smooth[domKey]||0)*100)}% 에너지`,14,bY+(VH-bY)*.22+13);
+  vx.fillStyle='rgba(253,230,138,.32)'; vx.fillText('▸ 지구 내핵',14,VH-14);
+  vx.textAlign='right'; vx.fillStyle='rgba(232,224,208,.35)';
+  vx.fillText('화구 ◂',VW-14,pY-6);
+  vx.fillText('화도 ◂',VW-14,lerp(pY,bY,.28));
+  vx.fillText('맨틀 ◂',VW-14,bY+18);
+  vx.textAlign='center'; vx.fillStyle=CFG[domKey].col+'cc';
+  vx.font='bold 13px "Bebas Neue",sans-serif';
+  vx.fillText(CFG[domKey].temp+'°C',cx,bY+(VH-bY)*.5);
+}
+
+// ─── CAMERA ───────────────────────────────────────────────
+const video = document.getElementById('video');
+const ovCanvas = document.getElementById('ov-canvas');
+const oc = ovCanvas.getContext('2d');
+
+async function startCamera(){
+  const btn=document.getElementById('cam-btn');
+  btn.disabled=true; btn.textContent='로딩 중...';
+  setStatus('loading','AI 모델 로드 중');
+
+  // Wait for face-api script to load
+  let waited=0;
+  while(!window.faceapi && waited<12000){
+    await sleep(300); waited+=300;
+  }
+
+  if(!window.faceapi){
+    btn.disabled=false; btn.textContent='재시도';
+    setStatus('err','라이브러리 로드 실패');
+    document.querySelector('#cam-ui p').textContent='네트워크 오류. 슬라이더로 체험해보세요.';
+    return;
+  }
+
+  // Load model weights (try multiple CDN sources)
+  const WEIGHT_URLS=[
+    'https://unpkg.com/face-api.js@0.22.2/weights',
+    'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights',
+    'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights',
+  ];
+
+  let loaded=false;
+  for(const url of WEIGHT_URLS){
+    try{
+      document.getElementById('l-msg').textContent='모델 로드: '+url.split('/')[2]+'...';
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(url),
+        faceapi.nets.faceExpressionNet.loadFromUri(url),
+      ]);
+      loaded=true;
+      break;
+    }catch(e){ console.warn('weight CDN fail:',url); }
+  }
+
+  if(!loaded){
+    btn.disabled=false; btn.textContent='재시도';
+    setStatus('err','모델 로드 실패');
+    document.querySelector('#cam-ui p').textContent='모델 로드 실패. 슬라이더로 체험하세요.';
+    return;
+  }
+
+  // Open camera
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}
+    });
+    video.srcObject=stream;
+    await new Promise(r=>{video.onloadeddata=r;});
+
+    camRunning=true;
+    document.getElementById('cam-ui').classList.add('gone');
+    setStatus('on','얼굴 인식 중');
+
+    ovCanvas.width  = video.videoWidth  || 640;
+    ovCanvas.height = video.videoHeight || 480;
+
+    detectLoop();
+  }catch(e){
+    btn.disabled=false; btn.textContent='카메라 재시도';
+    setStatus('err','카메라 권한 없음');
+  }
+}
+
+async function detectLoop(){
+  const options=new faceapi.TinyFaceDetectorOptions({inputSize:224, scoreThreshold:0.38});
+
+  async function step(){
+    if(!camRunning){ setTimeout(step,500); return; }
+    try{
+      const det=await faceapi.detectSingleFace(video,options).withFaceExpressions();
+      oc.clearRect(0,0,ovCanvas.width,ovCanvas.height);
+
+      if(det){
+        // ── KEY FIX: only write to raw when sliders are NOT active ──
+        if(!sliderActive){
+          const ex=det.expressions;
+          // face-api returns values that sum to ~1; assign directly
+          raw.angry     = ex.angry     || 0;
+          raw.fearful   = ex.fearful   || 0;
+          raw.surprised = ex.surprised || 0;
+          raw.happy     = ex.happy     || 0;
+          raw.sad       = ex.sad       || 0;
+          raw.disgusted = ex.disgusted || 0;
+          raw.neutral   = ex.neutral   || 0;
+        }
+
+        // Draw bounding box (canvas is CSS-mirrored via scaleX(-1))
+        const b=det.detection.box;
+        const sX=ovCanvas.width/(video.videoWidth||640);
+        const sY=ovCanvas.height/(video.videoHeight||480);
+        const bx=ovCanvas.width-(b.x+b.width)*sX;
+        oc.strokeStyle=CFG[domKey]?.col||'#f97316';
+        oc.lineWidth=2;
+        oc.strokeRect(bx, b.y*sY, b.width*sX, b.height*sY);
+        oc.fillStyle=CFG[domKey]?.col||'#f97316';
+        oc.font='bold 11px sans-serif';
+        oc.fillText(CFG[domKey]?.name||'', bx, b.y*sY-5);
+
+        // FPS counter
+        fpsCount++;
+        const now=Date.now();
+        if(now-fpsTimer>=1000){
+          document.getElementById('dbg-fps').textContent=fpsCount+'fps';
+          fpsCount=0; fpsTimer=now;
+        }
+      } else {
+        // No face detected — gently drift raw toward neutral
+        if(!sliderActive){
+          KEYS.forEach(k=>{
+            raw[k]= k==='neutral'
+              ? Math.min(1,(raw[k]||0)+0.04)
+              : Math.max(0,(raw[k]||0)-0.04);
+          });
+        }
+        document.getElementById('dbg-fps').textContent='얼굴 없음';
+      }
+    }catch(e){ console.error('detect err:',e); }
+
+    // 120ms interval ≈ 8fps — fast enough for smooth UX
+    setTimeout(step,120);
+  }
+  step();
+}
+
+// ─── UTILITIES ────────────────────────────────────────────
+function setStatus(state,msg){
+  const d=document.getElementById('sdot');
+  d.className=state==='on'?'on':state==='loading'?'loading':state==='err'?'err':'';
+  document.getElementById('stxt').textContent=msg;
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function saveImg(){
+  const a=document.createElement('a');
+  a.download='emotion-volcano-'+Date.now()+'.png';
+  a.href=vc.toDataURL(); a.click();
+}
+function clearTL(){
+  timeline=[]; lastTLKey='';
+  document.getElementById('tl-list').innerHTML='<div class="tl-item" style="color:rgba(232,224,208,.25)">감정 인식 시 자동 기록됩니다</div>';
+}
+function doShare(){
+  const cfg=CFG[domKey];
+  const txt=`나의 감정 화산: ${cfg.icon} ${cfg.name} → ${cfg.vtype}\n"${cfg.vdesc}"\n#EmotionVolcano #감정화산`;
+  if(navigator.share) navigator.share({title:'Emotion Volcano',text:txt});
+  else navigator.clipboard?.writeText(txt).then(()=>alert('클립보드에 복사됨!'));
+}
+
+// ─── INIT ─────────────────────────────────────────────────
+// Load face-api.js (try multiple CDNs)
+(function loadFaceApi(){
+  const srcs=[
+    'https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js',
+    'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+  ];
+  let i=0;
+  function next(){
+    if(i>=srcs.length){ window._faceApiFailed=true; return; }
+    const s=document.createElement('script');
+    s.src=srcs[i++]; s.onload=()=>{window.faceapi&&console.log('face-api loaded:',s.src);}; s.onerror=next;
+    document.head.appendChild(s);
+  }
+  next();
+})();
+
+window.addEventListener('load',()=>{
+  // Animate loading bar
+  const bar=document.getElementById('l-bar');
+  let p=0;
+  const iv=setInterval(()=>{
+    p=Math.min(p+7,100); bar.style.width=p+'%';
+    if(p>=100){
+      clearInterval(iv);
+      document.getElementById('l-msg').textContent='준비 완료';
+      setTimeout(()=>document.getElementById('loading').classList.add('gone'),350);
+    }
+  },70);
+
+  // UI loop (12fps)
+  setInterval(updateUI,80);
+  // Render loop (60fps)
+  renderVolcano();
+});
+</script>
+</body>
+</html>
